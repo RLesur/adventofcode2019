@@ -939,3 +939,211 @@ program <- readLines("day-2/input_part-1.txt")
 process <- computer(program)
 ```
 
+# Part II
+
+OK, let's begin by modifying the previous program to use the correct terms and implement memory management.
+
+```{r}
+computer <- function(program, noun = 12L, verb = 2L, auto = TRUE, .verbose = TRUE, restore = TRUE) {
+  instruction_pointer <- 0L
+  waiting_for_execution <- TRUE # init
+  running <- TRUE # init
+  
+  is_running <- function() { running }
+  
+  program <- eval(parse(text = paste0("c(", program, ")")))
+  program <- as.integer(program)
+
+  get_program <- function() { 
+    paste(program, collapse = ",") 
+  }
+  
+  # NEW
+  fix_program <- function() {
+    if (isTRUE(.verbose)) {
+      message('Modifying the program with noun ', noun, ' and verb ', verb)
+    }
+    new_program <- program # init
+    new_program[2] <- noun # position 1
+    new_program[3] <- verb # position 2
+    program <<- new_program
+    if (isTRUE(.verbose)) {
+      message("Restored program:\n", get_program())
+    }
+  }
+  
+  if (isTRUE(.verbose)) {
+    message("Program succesfully read:\n", get_program())
+  }
+  
+  if (isTRUE(restore)) {
+    fix_program()
+  }
+  
+  # NEW
+  memory <- program
+  if (isTRUE(.verbose)) {
+    message("Memory initialized: ", paste(memory, collapse = ","))
+  }
+  
+  read_addresses <- function(addresses) {
+    memory[addresses + 1L]
+  }
+  
+  get_address_0 = function() {
+    read_addresses(0L)  
+  }
+  
+  read_position <- function(position) { 
+    program[position + 1L] 
+  }
+  
+  read_instruction <- function() {
+    instruction_positions <- seq.int(instruction_pointer + 1L, instruction_pointer + 4L)
+    program[instruction_positions]
+  }
+  
+  get_opcode <- function() { 
+    instruction <- read_instruction()
+    instruction[1]
+  }
+
+  check_opcode <- function() {
+    opcode <- get_opcode()
+    if (!(opcode %in% c(1L, 2L, 99L))) {
+      stop("Wrong Opcode. Read ", opcode, " at position ", instruction_pointer, 
+           ". Opcode must be 1, 2 or 99.")
+    }
+    
+    if (identical(opcode, 99L)) {
+      running <<- FALSE
+      waiting_for_execution <<- FALSE
+      # NEW
+      if (isTRUE(.verbose)) {
+        message("Program halted.")
+      }
+    } else {
+      if (isTRUE(.verbose)) {
+        message("Program running...")
+      }
+    }
+  }
+  
+  check_opcode()
+
+  get_operation <- function() {
+    opcode <- get_opcode()
+    switch(opcode, sum, prod)
+  }
+  
+  get_operands <- function() {
+    current_instruction <- read_instruction()
+    addresses <- current_instruction[2:3]
+    read_addresses(addresses)
+  }
+  
+  compute_value_from_current_instruction <- function() {
+    operation <- get_operation()
+    operands <- get_operands()
+    as.integer(operation(operands))
+  }
+  
+  store <- function(address, value) {
+    if (address + 1L > length(memory)) {
+      stop("Cannot write to memory address ", address, " because the allocated memory is: ", length(memory), ".")
+    } else {
+      if (isTRUE(.verbose)) {
+        message("Writing value ", value, " in memory address ", address)
+      }
+    }
+    new_memory <- memory # init
+    new_memory[address + 1L] <- value
+    memory <<- new_memory
+  }
+
+  get_output_address <- function() {
+    current_instruction <- read_instruction()
+    current_instruction[4]
+  }
+  
+  execute_instruction <- function() {
+    if (!isTRUE(running)) {
+      stop("Cannot execute: program halted.")
+    }
+    if (!isTRUE(waiting_for_execution)) {
+      stop("Current instruction already executed.")
+    }
+    store(get_output_address(), compute_value_from_current_instruction())
+    waiting_for_execution <<- FALSE
+  }
+  
+  move_instruction_pointer <- function() { 
+    if (!isTRUE(running)) {
+      stop("Cannot move instruction pointer: program halted.")
+    }
+    if (isTRUE(waiting_for_execution)) {
+      stop("Cannot move instruction pointer: operation on the current instruction was not performed.")
+    }
+    next_position <- instruction_pointer + 4L
+    if (next_position > length(program) - 1L) {
+      stop("Instruction pointer cannot be moved to position ", next_position, ".")
+    }
+    
+    instruction_pointer <<- next_position
+    
+    if (isTRUE(.verbose)) {
+      message("Instruction pointer moved at position ", instruction_pointer)
+    }
+    waiting_for_execution <<- TRUE
+    check_opcode()
+  }
+  
+  perform_cycle <- function() {
+    if (isTRUE(.verbose)) {
+      message("Computing...")
+      message("Current instruction: ", paste(read_instruction(), collapse = ","))
+    }
+    execute_instruction()
+    if (isTRUE(.verbose)) {
+      message("Modified memory:\n", paste(memory, collapse = ","))
+      message("Program:\n", get_program())
+      message("Moving instruction_pointer...")
+    }
+    move_instruction_pointer()
+  }
+  
+  if (isTRUE(auto)) {
+    while (is_running()) {
+      perform_cycle()
+    }
+    return(get_address_0())
+  }
+  
+  list(
+    get_program = get_program,
+    get_instruction_pointer_position = function() { instruction_pointer },
+    get_opcode = get_opcode,
+    read_instruction = read_instruction,
+    is_running = is_running,
+    perform_cycle = perform_cycle,
+    get_address_0 = get_address_0
+  )
+}
+```
+
+```{r}
+program <- readLines("day-2/input_part-1.txt")
+get_output <- function(noun, verb) {
+  computer(program = program, noun = noun, verb = verb, .verbose = FALSE)
+}
+get_outputs <- function(nouns, verbs) mapply(get_output, noun = nouns, verb = verbs)
+
+nouns <- rep(0:99, 100)
+verbs <- do.call(c, lapply(0:99, function(x) rep(x, 100)))
+df <- data.frame(noun = nouns, verb = verbs)
+df$output <- get_outputs(df$noun, df$verb)
+# I have to find 19690720
+line_number <- match(19690720, df$output)
+df$noun[line_number] * 100 + df$verb[line_number]
+```
+That's it!
