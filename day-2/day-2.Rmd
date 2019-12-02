@@ -1,0 +1,941 @@
+---
+title: "Advent of Code 2019"
+subtitle: "Day 2"
+author: "Romain Lesur"
+date: "02/12/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+My first idea is to use a reference class object. I feel that a closure could suffice.
+
+## First step: process the input.
+
+```{r}
+#' Incode computer
+#'
+#' @param program A string with comma separated integers (an Intcodes program)
+#'
+#' @return An object
+computer <- function(program) {
+  program <- strsplit(program, ",")[[1]] # use [[1]] because we have a single program
+  program <- as.integer(program)
+  
+  list(
+    current_program = function() { program }
+  )
+}
+```
+
+OK. Let's test that.
+
+```{r}
+program <- "1,9,10,3,2,3,11,0,99,30,40,50"
+
+process <- computer(program)
+
+process$current_program()
+```
+
+It seems to be OK.
+
+Oh! I have a fun idea to process the input! The program is very similar to a vector input in R. If I add "c(" before the program and ")" after, this is how I write a vector. So, I want to try with `parse()`.
+
+```{r}
+computer <- function(program) {
+  program <- eval(parse(text = paste0("c(", program, ")")))
+  program <- as.integer(program)
+  
+  list(
+    current_program = function() { program }
+  )
+}
+```
+
+Now, test that.
+
+```{r}
+program <- "1,9,10,3,2,3,11,0,99,30,40,50"
+
+process <- computer(program)
+
+process$current_program()
+```
+
+That's good. I like this trick. I want to keep it.
+
+## Reading a stack
+
+OK. Now, I have to deal with the positions and reading a stack of 4 integers. Let's keep in mind that vectors are indexed from 1 in R and not 0. This is a trap for this game.
+
+```{r}
+computer <- function(program) {
+  program <- eval(parse(text = paste0("c(", program, ")")))
+  program <- as.integer(program)
+  
+  pointer <- 0L # I want to respect the convention defined in the game
+  
+  read_position <- function(position) { 
+    program[position + 1L] 
+  }
+  
+  read_stack <- function(position) {
+      stack_positions <- seq.int(position + 1L, position + 4L)
+      program[stack_positions]
+  }
+  
+  list(
+    current_program = function() { program },
+    get_pointer_position = function() { pointer },
+    get_pointer_value = function() { read_position(pointer) },
+    get_stack_from_pointer = function() { read_stack(pointer) },
+    move_pointer = function() { pointer <<- pointer + 4L }
+  )
+}
+```
+
+Now, I want to test this new methods
+
+```{r}
+program <- "1,9,10,3,2,3,11,0,99,30,40,50"
+
+process <- computer(program)
+
+process$current_program()
+
+test_identical <- function(...) stopifnot(identical(...))
+
+test_identical(process$get_pointer_position(), 0L)
+
+test_identical(process$get_pointer_value(), 1L)
+
+test_identical(
+  process$get_stack_from_pointer(), 
+  c(1L, 9L, 10L, 3L)
+)
+
+process$move_pointer()
+
+test_identical(process$get_pointer_position(), 4L)
+test_identical(process$get_pointer_value(), 2L)
+test_identical(
+  process$get_stack_from_pointer(), 
+  c(2L, 3L, 11L, 0L)
+)
+```
+
+All tests passed: there's no error. 
+
+## Perform the operation
+
+Now, let's add some methods to perform the operation and override values.
+
+```{r}
+computer <- function(program) {
+  program <- eval(parse(text = paste0("c(", program, ")")))
+  program <- as.integer(program)
+  
+  pointer <- 0L # I want to respect the convention defined in the game
+  
+  read_position <- function(position) { 
+    program[position + 1L] 
+  }
+  
+  read_stack <- function(position) {
+      stack_positions <- seq.int(position + 1L, position + 4L)
+      program[stack_positions]
+  }
+  
+  # I move get_pointer_value() here for further reuse
+  get_pointer_value <- function() { 
+    read_position(pointer) 
+  }
+
+  # I create a new function to get the operation
+  get_operation <- function() {
+    opcode <- get_pointer_value()
+    switch(opcode, sum, prod)
+  }
+  
+  # I move get_stack_from_pointer here for further reuse
+  get_stack_from_pointer <- function() { 
+    read_stack(pointer) 
+  }
+  
+  # I create a new function to get the operands
+  get_operands <- function() {
+    current_stack <- get_stack_from_pointer()
+    positions <- current_stack[2:3]
+    read_position(positions)
+  }
+  
+  # I create a new function to compute the stack
+  compute_value_from_current_stack <- function() {
+    operation <- get_operation()
+    operands <- get_operands()
+    operation(operands)
+  }
+  
+  # I create a new function to overwrite a value
+  overwrite <- function(position, value) {
+    new_program <- program # init
+    new_program[position + 1L] <- value
+    program <<- new_program # note: <<- is used. That was the motivation for a closure.
+  }
+
+  # a new function to get the output position
+  get_output_position <- function() {
+    current_stack <- get_stack_from_pointer()
+    current_stack[4]
+  }
+  
+  # a new function to compute and overwrite the target position
+  overwrite_output_position <- function() {
+    overwrite(get_output_position(), compute_value_from_current_stack())
+  }
+  
+  list(
+    current_program = function() { program },
+    get_pointer_position = function() { pointer },
+    get_pointer_value = get_pointer_value, # moved
+    get_stack_from_pointer = get_stack_from_pointer, # moved
+    move_pointer = function() { pointer <<- pointer + 4L },
+    get_operands = get_operands, # new method
+    compute_value_from_current_stack = compute_value_from_current_stack, # new method
+    get_output_position = get_output_position, # new method
+    overwrite_output_position = overwrite_output_position # new method
+  )
+}
+```
+
+Now, some tests.  
+First, let's keep the previous tests.
+
+```{r}
+program <- "1,9,10,3,2,3,11,0,99,30,40,50"
+
+process <- computer(program)
+
+process$current_program()
+
+test_identical <- function(...) stopifnot(identical(...))
+
+test_identical(process$get_pointer_position(), 0L)
+
+test_identical(process$get_pointer_value(), 1L)
+
+test_identical(
+  process$get_stack_from_pointer(), 
+  c(1L, 9L, 10L, 3L)
+)
+
+process$move_pointer()
+
+test_identical(process$get_pointer_position(), 4L)
+test_identical(process$get_pointer_value(), 2L)
+test_identical(
+  process$get_stack_from_pointer(), 
+  c(2L, 3L, 11L, 0L)
+)
+```
+
+Add more tests for the new methods.
+
+```{r}
+program <- "1,9,10,3,2,3,11,0,99,30,40,50"
+
+# Warning: we moved the pointer in the previous test
+# Let's take a new fresh process
+process <- computer(program)
+
+test_identical(process$get_output_position(), 3L)
+test_identical(process$compute_value_from_current_stack(), 70L)
+process$overwrite_output_position()
+test_identical(
+  process$current_program(),
+  c(1L, 9L, 10L, 70L, 2L, 3L, 11L, 0L, 99L, 30L, 40L, 50L)
+)
+# Now, let's take the second operation:
+process$move_pointer()
+process$overwrite_output_position()
+```
+
+**Now, I have a problem. The following test fails:**
+
+```{r, eval=FALSE}
+test_identical(
+  process$current_program(),
+  c(3500L, 9L, 10L, 70L, 2L, 3L, 11L, 0L, 99L, 30L, 40L, 50L)
+)
+```
+
+The problem comes from the `prod()` function which does not return an integer.
+
+I have to modify `compute_value_from_current_stack()` to coerce to an integer.
+
+```{r}
+computer <- function(program) {
+  program <- eval(parse(text = paste0("c(", program, ")")))
+  program <- as.integer(program)
+  
+  pointer <- 0L # I want to respect the convention defined in the game
+  
+  read_position <- function(position) { 
+    program[position + 1L] 
+  }
+  
+  read_stack <- function(position) {
+      stack_positions <- seq.int(position + 1L, position + 4L)
+      program[stack_positions]
+  }
+  
+  get_pointer_value <- function() { 
+    read_position(pointer) 
+  }
+
+  get_operation <- function() {
+    opcode <- get_pointer_value()
+    switch(opcode, sum, prod)
+  }
+  
+  get_stack_from_pointer <- function() { 
+    read_stack(pointer) 
+  }
+  
+  get_operands <- function() {
+    current_stack <- get_stack_from_pointer()
+    positions <- current_stack[2:3]
+    read_position(positions)
+  }
+  
+  compute_value_from_current_stack <- function() {
+    operation <- get_operation()
+    operands <- get_operands()
+    as.integer(operation(operands)) # HERE IS THE PROBLEM
+  }
+  
+  overwrite <- function(position, value) {
+    new_program <- program # init
+    new_program[position + 1L] <- value
+    program <<- new_program # note: <<- is used. That was the motivation for a closure.
+  }
+
+  get_output_position <- function() {
+    current_stack <- get_stack_from_pointer()
+    current_stack[4]
+  }
+  
+  overwrite_output_position <- function() {
+    overwrite(get_output_position(), compute_value_from_current_stack())
+  }
+  
+  list(
+    current_program = function() { program },
+    get_pointer_position = function() { pointer },
+    get_pointer_value = get_pointer_value,
+    get_stack_from_pointer = get_stack_from_pointer,
+    move_pointer = function() { pointer <<- pointer + 4L },
+    get_operands = get_operands,
+    compute_value_from_current_stack = compute_value_from_current_stack,
+    get_output_position = get_output_position,
+    overwrite_output_position = overwrite_output_position
+  )
+}
+```
+
+Now, the tests for computing:
+
+```{r}
+program <- "1,9,10,3,2,3,11,0,99,30,40,50"
+
+# Let's take a new fresh process
+process <- computer(program)
+
+test_identical(process$get_output_position(), 3L)
+test_identical(process$compute_value_from_current_stack(), 70L)
+process$overwrite_output_position()
+test_identical(
+  process$current_program(),
+  c(1L, 9L, 10L, 70L, 2L, 3L, 11L, 0L, 99L, 30L, 40L, 50L)
+)
+# Now, let's take the second operation:
+process$move_pointer()
+process$overwrite_output_position()
+test_identical(
+  process$current_program(),
+  c(3500L, 9L, 10L, 70L, 2L, 3L, 11L, 0L, 99L, 30L, 40L, 50L)
+)
+```
+
+It works. Cool!
+
+Now, I have to implement a loop and halt the program when `99L` is encountered.
+
+## Halt and catch fire
+
+I haven't implemented yet a function to check the _opcode_. This check will be performed at the initialization and after the pointer has been moved. I think I have to implement some current state values. 
+
+I think that two current states would be useful:
+
+- a logical indicating if the current stack waits for computation
+- a logical indicating if the computer is running
+
+```{r}
+computer <- function(program) {
+  # new state variables
+  waiting_for_computation <- TRUE # init
+  running <- TRUE # init
+  
+  program <- eval(parse(text = paste0("c(", program, ")")))
+  program <- as.integer(program)
+  
+  pointer <- 0L # I want to respect the convention defined in the game
+  
+  read_position <- function(position) { 
+    program[position + 1L] 
+  }
+  
+  read_stack <- function(position) {
+      stack_positions <- seq.int(position + 1L, position + 4L)
+      program[stack_positions]
+  }
+  
+  get_pointer_value <- function() { 
+    read_position(pointer) 
+  }
+
+  # NEW method
+  check_opcode <- function() {
+    opcode <- get_pointer_value()
+    if (!(opcode %in% c(1L, 2L, 99L))) {
+      stop("Wrong Opcode. Read ", opcode, " at position ", pointer, 
+           ". Opcode must be 1, 2 or 99.")
+    }
+    
+    if (identical(opcode, 99L)) {
+      running <<- FALSE
+      waiting_for_computation <<- FALSE
+    }
+  }
+  
+  # NEW We must check the first opcode during the initialisation
+  check_opcode()
+  
+  get_operation <- function() {
+    opcode <- get_pointer_value()
+    switch(opcode, sum, prod)
+  }
+  
+  get_stack_from_pointer <- function() { 
+    read_stack(pointer) 
+  }
+  
+  get_operands <- function() {
+    current_stack <- get_stack_from_pointer()
+    positions <- current_stack[2:3]
+    read_position(positions)
+  }
+  
+  compute_value_from_current_stack <- function() {
+    operation <- get_operation()
+    operands <- get_operands()
+    as.integer(operation(operands))
+  }
+  
+  overwrite <- function(position, value) {
+    new_program <- program # init
+    new_program[position + 1L] <- value
+    program <<- new_program # note: <<- is used. That was the motivation for a closure.
+  }
+
+  get_output_position <- function() {
+    current_stack <- get_stack_from_pointer()
+    current_stack[4]
+  }
+  
+  overwrite_output_position <- function() {
+    # NEW Control the state
+    if (!isTRUE(running)) {
+      stop("Cannot compute: program halted.")
+    }
+    if (!isTRUE(waiting_for_computation)) {
+      stop("Current stack already computed.")
+    }
+    overwrite(get_output_position(), compute_value_from_current_stack())
+    # NEW Modify the state
+    waiting_for_computation <<- FALSE
+  }
+  
+  list(
+    current_program = function() { program },
+    get_pointer_position = function() { pointer },
+    get_pointer_value = get_pointer_value,
+    get_stack_from_pointer = get_stack_from_pointer,
+    move_pointer = function() { 
+      # NEW check if the pointer can be moved
+      if (!isTRUE(running)) {
+        stop("Cannot move pointer: program halted.")
+      }
+      if (isTRUE(waiting_for_computation)) {
+        stop("Cannot move pointer: operation on the current stack was not performed.")
+      }
+      next_position <- pointer + 4L
+      if (next_position > length(program) - 1L) {
+        stop("Pointer cannot be moved to position ", next_position, ".")
+      }
+      
+      pointer <<- next_position
+      # NEW change the state
+      waiting_for_computation <<- TRUE
+      # NEW check Opcode after moving
+      check_opcode()
+    },
+    get_operands = get_operands,
+    compute_value_from_current_stack = compute_value_from_current_stack,
+    get_output_position = get_output_position,
+    overwrite_output_position = overwrite_output_position,
+    is_running = function() { running }
+  )
+}
+```
+
+I haven't yet implemented the loop. I prefer to check first if this works has expected.
+
+Let's perform the whole tests.
+
+Let's take the first tests. They should fail when I try to move the pointer whithout having computing the current stack:
+
+```{r}
+program <- "1,9,10,3,2,3,11,0,99,30,40,50"
+
+process <- computer(program)
+
+process$current_program()
+
+test_identical <- function(...) stopifnot(identical(...))
+
+test_identical(process$get_pointer_position(), 0L)
+
+test_identical(process$get_pointer_value(), 1L)
+
+test_identical(
+  process$get_stack_from_pointer(), 
+  c(1L, 9L, 10L, 3L)
+)
+```
+
+That's it! The following test fails because I haven't computed the stack:
+```{r, eval=FALSE}
+process$move_pointer()
+```
+
+Now, compute the current stack.
+
+```{r}
+test_identical(process$get_output_position(), 3L)
+test_identical(process$compute_value_from_current_stack(), 70L)
+process$overwrite_output_position()
+test_identical(
+  process$current_program(),
+  c(1L, 9L, 10L, 70L, 2L, 3L, 11L, 0L, 99L, 30L, 40L, 50L)
+)
+# Now, let's take the second operation:
+process$move_pointer()
+process$overwrite_output_position()
+test_identical(
+  process$current_program(),
+  c(3500L, 9L, 10L, 70L, 2L, 3L, 11L, 0L, 99L, 30L, 40L, 50L)
+)
+```
+
+Now, move to the third stack:
+
+```{r}
+process$move_pointer()
+```
+
+I should get an error, now.
+```{r, eval=FALSE}
+process$overwrite_output_position()
+```
+
+Yes, this works!
+
+## Implement the loop and clean code
+
+Now, I have to implement the loop. I don't like when programs run without a verbose mode. Otherwise I cannot debug them. I also want to be able to execute by hand the different operations. Moreover, some methods shouldn't be exposed to the user.
+
+```{r}
+computer <- function(program, auto = TRUE, verbose = TRUE) {
+  waiting_for_computation <- TRUE # init
+  running <- TRUE # init
+  
+  is_running <- function() { running }
+  
+  program <- eval(parse(text = paste0("c(", program, ")")))
+  program <- as.integer(program)
+
+  # moved and modified
+  get_program <- function() { 
+    paste(program, collapse = ",") 
+  }
+  
+  # NEW
+  if (isTRUE(verbose)) {
+    message("Program succesfully read:\n", get_program())
+  }
+  
+  pointer <- 0L # I want to respect the convention defined in the game
+  
+
+  read_position <- function(position) { 
+    program[position + 1L] 
+  }
+  
+  read_stack <- function(position) {
+      stack_positions <- seq.int(position + 1L, position + 4L)
+      program[stack_positions]
+  }
+  
+  get_pointer_value <- function() { 
+    read_position(pointer) 
+  }
+
+  check_opcode <- function() {
+    opcode <- get_pointer_value()
+    if (!(opcode %in% c(1L, 2L, 99L))) {
+      stop("Wrong Opcode. Read ", opcode, " at position ", pointer, 
+           ". Opcode must be 1, 2 or 99.")
+    }
+    
+    if (identical(opcode, 99L)) {
+      running <<- FALSE
+      waiting_for_computation <<- FALSE
+      # NEW
+      if (isTRUE(verbose)) {
+        message("Program halted.")
+      }
+    } else {
+      if (isTRUE(verbose)) {
+        message("Program running...")
+      }
+    }
+  }
+  
+  check_opcode()
+
+  get_operation <- function() {
+    opcode <- get_pointer_value()
+    switch(opcode, sum, prod)
+  }
+  
+  get_stack_from_pointer <- function() { 
+    read_stack(pointer) 
+  }
+  
+  get_operands <- function() {
+    current_stack <- get_stack_from_pointer()
+    positions <- current_stack[2:3]
+    read_position(positions)
+  }
+  
+  compute_value_from_current_stack <- function() {
+    operation <- get_operation()
+    operands <- get_operands()
+    as.integer(operation(operands))
+  }
+  
+  overwrite <- function(position, value) {
+    # NEW
+    if (position + 1L > length(program)) {
+      stop("Cannot write to position ", position, " because the program is of length: ", length(program), ".")
+    } else {
+      if (isTRUE(verbose)) {
+        message("Writing value ", value, " at position ", position)
+      }
+    }
+    new_program <- program # init
+    new_program[position + 1L] <- value
+    program <<- new_program # note: <<- is used. That was the motivation for a closure.
+  }
+
+  get_output_position <- function() {
+    current_stack <- get_stack_from_pointer()
+    current_stack[4]
+  }
+  
+  overwrite_output_position <- function() {
+    if (!isTRUE(running)) {
+      stop("Cannot compute: program halted.")
+    }
+    if (!isTRUE(waiting_for_computation)) {
+      stop("Current stack already computed.")
+    }
+    overwrite(get_output_position(), compute_value_from_current_stack())
+    waiting_for_computation <<- FALSE
+  }
+  
+  move_pointer <- function() { 
+    if (!isTRUE(running)) {
+      stop("Cannot move pointer: program halted.")
+    }
+    if (isTRUE(waiting_for_computation)) {
+      stop("Cannot move pointer: operation on the current stack was not performed.")
+    }
+    next_position <- pointer + 4L
+    if (next_position > length(program) - 1L) {
+      stop("Pointer cannot be moved to position ", next_position, ".")
+    }
+    
+    pointer <<- next_position
+    # NEW
+    if (isTRUE(verbose)) {
+      message("Pointer moved at position ", pointer)
+    }
+    waiting_for_computation <<- TRUE
+    check_opcode()
+  }
+  
+  # NEW
+  perform_next_operation <- function() {
+    if (isTRUE(verbose)) {
+      message("Computing...")
+      message("Current stack: ", paste(get_stack_from_pointer(), collapse = ","))
+    }
+    overwrite_output_position()
+    if (isTRUE(verbose)) {
+      message("Modified program:\n", get_program())
+      message("Moving pointer...")
+    }
+    move_pointer()
+  }
+  
+  if (isTRUE(auto)) {
+    while (is_running()) {
+      perform_next_operation()
+    }
+  }
+  
+  list(
+    get_program = get_program, # moved and modified
+    get_pointer_position = function() { pointer },
+    get_pointer_value = get_pointer_value,
+    get_stack_from_pointer = get_stack_from_pointer,
+    is_running = is_running, # moved
+    perform_next_operation = perform_next_operation
+  )
+}
+```
+
+```{r}
+program <- "1,9,10,3,2,3,11,0,99,30,40,50"
+
+process <- computer(program)
+```
+
+Now, let's test with the other programs proposed by Advent of Code:
+
+```{r}
+process <- computer("1,0,0,0,99")
+test_identical(process$get_program(), "2,0,0,0,99")
+
+process <- computer("2,3,0,3,99")
+test_identical(process$get_program(), "2,3,0,6,99")
+
+process <- computer("2,4,4,5,99,0")
+test_identical(process$get_program(), "2,4,4,5,99,9801")
+
+process <- computer("1,1,1,4,99,5,6,0,99")
+test_identical(process$get_program(), "30,1,1,4,2,5,6,0,99")
+```
+
+## Restoring to the "1202 program alarm" state
+
+The final modification is to implement the "1202 program alarm" state. The trap is the indices...
+
+```{r}
+computer <- function(program, auto = TRUE, verbose = TRUE, restore_1202_state = TRUE) {
+  waiting_for_computation <- TRUE # init
+  running <- TRUE # init
+  
+  is_running <- function() { running }
+  
+  program <- eval(parse(text = paste0("c(", program, ")")))
+  program <- as.integer(program)
+
+  get_program <- function() { 
+    paste(program, collapse = ",") 
+  }
+  
+  # NEW
+  fix_program <- function() {
+    if (isTRUE(verbose)) {
+      message('Restoring to the "1202 program alarm" state...')
+    }
+    new_program <- program # init
+    new_program[2] <- 12L # position 1
+    new_program[3] <- 2L # position 2
+    program <<- new_program
+    if (isTRUE(verbose)) {
+      message("Restored program:\n", get_program())
+    }
+  }
+  
+  if (isTRUE(verbose)) {
+    message("Program succesfully read:\n", get_program())
+  }
+  
+  if (isTRUE(restore_1202_state)) {
+    fix_program()
+  }
+  
+  pointer <- 0L # I want to respect the convention defined in the game
+
+  read_position <- function(position) { 
+    program[position + 1L] 
+  }
+  
+  read_stack <- function(position) {
+      stack_positions <- seq.int(position + 1L, position + 4L)
+      program[stack_positions]
+  }
+  
+  get_pointer_value <- function() { 
+    read_position(pointer) 
+  }
+
+  check_opcode <- function() {
+    opcode <- get_pointer_value()
+    if (!(opcode %in% c(1L, 2L, 99L))) {
+      stop("Wrong Opcode. Read ", opcode, " at position ", pointer, 
+           ". Opcode must be 1, 2 or 99.")
+    }
+    
+    if (identical(opcode, 99L)) {
+      running <<- FALSE
+      waiting_for_computation <<- FALSE
+      # NEW
+      if (isTRUE(verbose)) {
+        message("Program halted.")
+      }
+    } else {
+      if (isTRUE(verbose)) {
+        message("Program running...")
+      }
+    }
+  }
+  
+  check_opcode()
+
+  get_operation <- function() {
+    opcode <- get_pointer_value()
+    switch(opcode, sum, prod)
+  }
+  
+  get_stack_from_pointer <- function() { 
+    read_stack(pointer) 
+  }
+  
+  get_operands <- function() {
+    current_stack <- get_stack_from_pointer()
+    positions <- current_stack[2:3]
+    read_position(positions)
+  }
+  
+  compute_value_from_current_stack <- function() {
+    operation <- get_operation()
+    operands <- get_operands()
+    as.integer(operation(operands))
+  }
+  
+  overwrite <- function(position, value) {
+    if (position + 1L > length(program)) {
+      stop("Cannot write to position ", position, " because the program is of length: ", length(program), ".")
+    } else {
+      if (isTRUE(verbose)) {
+        message("Writing value ", value, " at position ", position)
+      }
+    }
+    new_program <- program # init
+    new_program[position + 1L] <- value
+    program <<- new_program # note: <<- is used. That was the motivation for a closure.
+  }
+
+  get_output_position <- function() {
+    current_stack <- get_stack_from_pointer()
+    current_stack[4]
+  }
+  
+  overwrite_output_position <- function() {
+    if (!isTRUE(running)) {
+      stop("Cannot compute: program halted.")
+    }
+    if (!isTRUE(waiting_for_computation)) {
+      stop("Current stack already computed.")
+    }
+    overwrite(get_output_position(), compute_value_from_current_stack())
+    waiting_for_computation <<- FALSE
+  }
+  
+  move_pointer <- function() { 
+    if (!isTRUE(running)) {
+      stop("Cannot move pointer: program halted.")
+    }
+    if (isTRUE(waiting_for_computation)) {
+      stop("Cannot move pointer: operation on the current stack was not performed.")
+    }
+    next_position <- pointer + 4L
+    if (next_position > length(program) - 1L) {
+      stop("Pointer cannot be moved to position ", next_position, ".")
+    }
+    
+    pointer <<- next_position
+    # NEW
+    if (isTRUE(verbose)) {
+      message("Pointer moved at position ", pointer)
+    }
+    waiting_for_computation <<- TRUE
+    check_opcode()
+  }
+  
+  # NEW
+  perform_next_operation <- function() {
+    if (isTRUE(verbose)) {
+      message("Computing...")
+      message("Current stack: ", paste(get_stack_from_pointer(), collapse = ","))
+    }
+    overwrite_output_position()
+    if (isTRUE(verbose)) {
+      message("Modified program:\n", get_program())
+      message("Moving pointer...")
+    }
+    move_pointer()
+  }
+  
+  if (isTRUE(auto)) {
+    while (is_running()) {
+      perform_next_operation()
+    }
+  }
+  
+  list(
+    get_program = get_program,
+    get_pointer_position = function() { pointer },
+    get_pointer_value = get_pointer_value,
+    get_stack_from_pointer = get_stack_from_pointer,
+    is_running = is_running, # moved
+    perform_next_operation = perform_next_operation
+  )
+}
+```
+
+Now, playing:
+
+```{r}
+program <- readLines("day-2/input_part-1.txt")
+process <- computer(program)
+```
+
