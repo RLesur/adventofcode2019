@@ -71,3 +71,7 @@ get_min_steps <- function(raw_instructions) {
   total_steps <- steps1 + steps2
   min(total_steps)  
 }
+
+get_min_steps(example1)
+get_min_steps(example2)
+get_min_steps(raw_instructions)
