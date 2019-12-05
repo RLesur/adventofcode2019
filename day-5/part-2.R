@@ -34,6 +34,10 @@ Program <- R6::R6Class(
       if (identical(opcode, 2L)) return(4L)
       if (identical(opcode, 3L)) return(2L)
       if (identical(opcode, 4L)) return(2L)
+      if (identical(opcode, 5L)) return(3L)
+      if (identical(opcode, 6L)) return(3L)
+      if (identical(opcode, 7L)) return(4L)
+      if (identical(opcode, 8L)) return(4L)
       if (identical(opcode, 99L)) return(1L)
       stop("Wrong Opcode")
     },
@@ -43,10 +47,14 @@ Program <- R6::R6Class(
       program <- self$get_program()
       program[seq.int(instruction_pointer + 1, instruction_pointer + instruction_length)]
     },
-    move_pointer = function() {
+    move_pointer = function(address) {
       if (!self$is_running()) stop("Program halted.")
-      instruction_length <- self$get_instruction_length()
-      private$instruction_pointer <- private$instruction_pointer + instruction_length
+      if (missing(address)) {
+        instruction_length <- self$get_instruction_length()
+        private$instruction_pointer <- private$instruction_pointer + instruction_length
+      } else {
+        private$instruction_pointer <- address
+      }
       opcode <- self$get_opcode()
       if (identical(opcode, 99L)) {
         private$running <- FALSE
@@ -79,8 +87,8 @@ Program <- R6::R6Class(
     get_operands = function() {
       parameters <- self$get_parameters()
       parameters_mode <- self$get_parameters_mode()
-      if (length(parameters) == 3) {
-        parameters <- parameters[1:2]
+      if (length(parameters) >= 3) {
+        parameters <- head(parameters, -1)
       }
       get_value <- function(i) {
         if (parameters_mode[i] == 1) return(parameters[i]) 
@@ -91,9 +99,13 @@ Program <- R6::R6Class(
     },
     get_operation = function() {
       opcode <- self$get_opcode()
-      if (opcode > 2) stop("Opcode must be 1 or 2")
+      if (!(opcode %in% c(1:2, 5:8))) stop("Opcode must be 1, 2, 5, 6, 7, 8")
       if (opcode == 1) return(sum)
       if (opcode == 2) return(prod)
+      if (opcode == 5) return(function(x) x[1] != 0)
+      if (opcode == 6) return(function(x) x[1] == 0)
+      if (opcode == 7) return(function(x) x[1] < x[2])
+      if (opcode == 8) return(function(x) x[1] == x[2])
     },
     read = function(address) {
       private$program[address + 1]
@@ -109,42 +121,45 @@ Program <- R6::R6Class(
       if (opcode == 4) {
         operands <- self$get_operands()
         cat(operands)
+        self$move_pointer()
       }
-      if (opcode == 3) self$write(private$input, self$get_parameters())
-      if (opcode >= 1 && opcode <= 2) {
+      if (opcode == 3) {
+        self$write(private$input, self$get_parameters())
+        self$move_pointer()
+      }
+      if (opcode %in% c(1:2, 7:8)) {
         operands <- self$get_operands()
         operation <- self$get_operation()
+        output_value <- operation(operands)
         parameters <- self$get_parameters()
         output_address <- parameters[3]
-        output_value <- operation(operands)
         self$write(output_value, output_address)
+        self$move_pointer()
       }
-      private$waiting_for_execution <- FALSE
+      if (opcode %in% 5:6) {
+        operands <- self$get_operands()
+        operation <- self$get_operation()
+        test <- operation(operands)
+        pointer_address <- operands[2]
+        if (isTRUE(test))
+          self$move_pointer(pointer_address)
+        else
+          self$move_pointer()
+      }
     },
     run = function() {
       while (self$is_running()) {
         self$execute_instruction()
-        self$move_pointer()
       }
     }
   )
 )
 
-program <- Program$new("4,3,3,4,33", 1)
-program$get_instruction()
-program$get_instruction_length()
-program$get_instruction_pointer()
-program$get_opcode()
-program$get_parameters()
-program$get_parameters_mode()
-program$get_program()
-program$is_running()
-program$execute_instruction()
-program$get_program()
-program$move_pointer()
-program$get_opcode()
-
-code <- readLines("day-5/input.txt")
-program <- Program$new(code, 1)
+program <- Program$new("3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,
+1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,
+999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99", 9)
 program$run()
 
+code <- readLines("day-5/input.txt")
+program <- Program$new(code, 5)
+program$run()
