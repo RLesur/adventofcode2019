@@ -170,30 +170,45 @@ Amplifier <- R6::R6Class(
   )
 )
 
-program <- "3,31,3,32,1002,32,10,32,1001,31,-2,31,1007,31,0,33,1002,33,7,33,1,33,31,31,1,32,31,31,4,31,99,0,0,0"
+thruster_signal <- function(phase_settings, program) {
+  amplifier_A <- Amplifier$new(program = program, input = c(phase_settings[1], 0L))
+  output_A <- amplifier_A$run()
+  
+  amplifier_B <- Amplifier$new(program = program, input = c(phase_settings[2], output_A))
+  output_B <- amplifier_B$run()
+  
+  amplifier_C <- Amplifier$new(program = program, input = c(phase_settings[3], output_B))
+  output_C <- amplifier_C$run()
+  
+  amplifier_D <- Amplifier$new(program = program, input = c(phase_settings[4], output_C))
+  output_D <- amplifier_D$run()
+  
+  amplifier_E <- Amplifier$new(program = program, input = c(phase_settings[5], output_D))
+  amplifier_E$run()
+}
 
-phase_settings <- c(1L, 0L, 4L, 3L, 2L)
-amplifier_A <- Amplifier$new(program = program, input = c(phase_settings[1], 0L))
-output_A <- amplifier_A$run()
+max_thruster_signal <- function(program) {
+  permutations <- gtools::permutations(5, 5, 0:4)
+  n_permutations <- nrow(permutations)
+  get_thruster_signal <- function(index, program) {
+    phase_settings <- permutations[index,]
+    thruster_signal(phase_settings, program)
+  }
+  res <- vapply(seq.int(1, n_permutations), get_thruster_signal, FUN.VALUE = integer(1), program = program)
+  max(res)
+}
 
-amplifier_B <- Amplifier$new(program = program, input = c(phase_settings[2], output_A))
-output_B <- amplifier_B$run()
+# test
+max_thruster_signal("3,15,3,16,1002,16,10,16,1,16,15,15,4,15,99,0,0")
+max_thruster_signal("3,23,3,24,1002,24,10,24,1002,23,-1,23,101,5,23,23,1,24,23,23,4,23,99,0,0")
+max_thruster_signal("3,31,3,32,1002,32,10,32,1001,31,-2,31,1007,31,0,33,1002,33,7,33,1,33,31,31,1,32,31,31,4,31,99,0,0,0")
 
-amplifier_C <- Amplifier$new(program = program, input = c(phase_settings[3], output_B))
-output_C <- amplifier_C$run()
+# game
+program <- readLines("day-7/input.txt")
+max_thruster_signal(program)
 
-amplifier_D <- Amplifier$new(program = program, input = c(phase_settings[4], output_C))
-output_D <- amplifier_D$run()
+# unused, keep it for later
+itobase5 <- function(n) {
+  c(floor(n / 5^4) %% 5, floor(n / 5^3) %% 5, floor(n / 5^2) %% 5, floor(n / 5^1) %% 5, floor(n / 5^0) %% 5)
+}
 
-amplifier_E <- Amplifier$new(program = program, input = c(phase_settings[5], output_D))
-output_E <- amplifier_E$run()
-
-
-program <- Program$new("3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,
-1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,
-999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99", 9)
-program$run()
-
-code <- readLines("day-5/input.txt")
-program <- Program$new(code, 5)
-program$run()
