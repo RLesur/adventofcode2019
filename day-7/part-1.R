@@ -7,8 +7,10 @@ Amplifier <- R6::R6Class(
     input = NULL, # a vector
     instruction_pointer = 0L,
     running = TRUE,
+    paused = FALSE,
     waiting_for_execution = TRUE,
-    output = NULL # an integer
+    output = NULL, # an integer
+    .last_output = NULL # an integer
   ),
   public = list(
     initialize = function(program, input) {
@@ -18,6 +20,12 @@ Amplifier <- R6::R6Class(
     },
     is_running = function() {
       private$running
+    },
+    pause = function() {
+      private$paused <- TRUE
+    },
+    is_paused = function() {
+      private$paused
     },
     get_program = function() {
       private$program
@@ -50,6 +58,7 @@ Amplifier <- R6::R6Class(
     },
     move_pointer = function(address) {
       if (!self$is_running()) stop("Program halted.")
+      if (self$is_paused()) stop("Program paused.")
       if (missing(address)) {
         instruction_length <- self$get_instruction_length()
         private$instruction_pointer <- private$instruction_pointer + instruction_length
@@ -121,11 +130,16 @@ Amplifier <- R6::R6Class(
       private$output <- as.integer(output_string)
     },
     get_output = function() {
-      private$output
+      private$.last_output <- private$output
+      private$output <- NULL
+      private$.last_output
     },
     read_input = function() {
       input <- private$input
-      if (identical(length(input), 0L)) stop("input missing")
+      if (identical(length(input), 0L)) {
+        self$pause()
+        return()
+      }
       private$input <- tail(input, -1)
       as.integer(input[1])
     },
@@ -138,7 +152,9 @@ Amplifier <- R6::R6Class(
         self$move_pointer()
       }
       if (opcode == 3) {
-        self$write(self$read_input(), self$get_parameters())
+        input <- self$read_input()
+        if (self$is_paused()) return()
+        self$write(input, self$get_parameters())
         self$move_pointer()
       }
       if (opcode %in% c(1:2, 7:8)) {
@@ -162,10 +178,17 @@ Amplifier <- R6::R6Class(
       }
     },
     run = function() {
-      while (self$is_running()) {
+      while (self$is_running() && !self$is_paused()) {
         self$execute_instruction()
       }
       self$get_output()
+    },
+    resume = function(input) {
+      if (!self$is_running()) stop("Cannot resume: not running.")
+      if (!self$is_paused()) stop("Cannot resume: not paused.")
+      private$input <- c(private$input, input)
+      private$paused <- FALSE
+      self$run()
     }
   )
 )
