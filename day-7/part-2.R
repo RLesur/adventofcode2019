@@ -132,6 +132,9 @@ Amplifier <- R6::R6Class(
       private$output <- NULL
       private$.last_output
     },
+    get_last_output = function() {
+      private$.last_output
+    },
     read_input = function() {
       input <- private$input
       if (identical(length(input), 0L)) {
@@ -192,25 +195,60 @@ Amplifier <- R6::R6Class(
   )
 )
 
+FeedbackLoop <- R6::R6Class(
+  private = list(
+    signal = NULL,
+    amplifier_to_feed = NULL
+  ),
+  public = list(
+    initialize = function(program, phase_settings) {
+      force(phase_settings)
+      private$signal <- 0L
+      private$amplifier_to_feed <- 1
+      names(phase_settings) <- paste("amplifier", LETTERS[seq.int(1, length(phase_settings))], sep = "_")
+      self$amplifiers <- lapply(phase_settings, function(x) {
+        amplifier <- Amplifier$new(program, x)
+        cat(amplifier$run())
+        amplifier
+      })
+    },
+    amplifiers = list(),
+    can_resume = function() {
+      self$amplifiers[[private$amplifier_to_feed]]$is_running()
+    },
+    resume_next_amplifier = function() {
+      amplifier <- self$amplifiers[[private$amplifier_to_feed]]
+      private$amplifier_to_feed <- private$amplifier_to_feed %% 5 + 1
+      private$signal <- amplifier$resume(private$signal)
+    },
+    get_output = function() {
+      self$amplifiers[[5]]$get_last_output()
+    },
+    run = function() {
+      while (self$can_resume()) {
+        self$resume_next_amplifier()
+      }
+      self$get_output()
+    }
+  )
+)
+
 thruster_signal <- function(phase_settings, program) {
-  amplifier_A <- Amplifier$new(program = program, input = c(phase_settings[1], 0L))
-  output_A <- amplifier_A$run()
-  
-  amplifier_B <- Amplifier$new(program = program, input = c(phase_settings[2], output_A))
-  output_B <- amplifier_B$run()
-  
-  amplifier_C <- Amplifier$new(program = program, input = c(phase_settings[3], output_B))
-  output_C <- amplifier_C$run()
-  
-  amplifier_D <- Amplifier$new(program = program, input = c(phase_settings[4], output_C))
-  output_D <- amplifier_D$run()
-  
-  amplifier_E <- Amplifier$new(program = program, input = c(phase_settings[5], output_D))
-  amplifier_E$run()
+  loop <- FeedbackLoop$new(program, phase_settings)
+  loop$run()
 }
 
+# tests
+program <- "3,26,1001,26,-4,26,3,27,1002,27,2,27,1,27,26,27,4,27,1001,28,-1,28,1005,28,6,99,0,0,5"
+phase_settings <- 9:5
+thruster_signal(phase_settings, program)
+
+program <- "3,52,1001,52,-5,52,3,53,1,52,56,54,1007,54,5,55,1005,55,26,1001,54,-5,54,1105,1,12,1,53,54,53,1008,54,0,55,1001,55,1,55,2,53,55,53,4,53,1001,56,-1,56,1005,56,6,99,0,0,0,0,10"
+phase_settings <- c(9L, 7L, 8L, 5L, 6L)
+thruster_signal(phase_settings, program)
+
 max_thruster_signal <- function(program) {
-  permutations <- gtools::permutations(5, 5, 0:4)
+  permutations <- gtools::permutations(5, 5, 5:9)
   n_permutations <- nrow(permutations)
   get_thruster_signal <- function(index, program) {
     phase_settings <- permutations[index,]
@@ -221,16 +259,9 @@ max_thruster_signal <- function(program) {
 }
 
 # test
-max_thruster_signal("3,15,3,16,1002,16,10,16,1,16,15,15,4,15,99,0,0")
-max_thruster_signal("3,23,3,24,1002,24,10,24,1002,23,-1,23,101,5,23,23,1,24,23,23,4,23,99,0,0")
-max_thruster_signal("3,31,3,32,1002,32,10,32,1001,31,-2,31,1007,31,0,33,1002,33,7,33,1,33,31,31,1,32,31,31,4,31,99,0,0,0")
+max_thruster_signal("3,26,1001,26,-4,26,3,27,1002,27,2,27,1,27,26,27,4,27,1001,28,-1,28,1005,28,6,99,0,0,5")
+max_thruster_signal("3,52,1001,52,-5,52,3,53,1,52,56,54,1007,54,5,55,1005,55,26,1001,54,-5,54,1105,1,12,1,53,54,53,1008,54,0,55,1001,55,1,55,2,53,55,53,4,53,1001,56,-1,56,1005,56,6,99,0,0,0,0,10")
 
 # game
 program <- readLines("day-7/input.txt")
 max_thruster_signal(program)
-
-# unused, keep it for later
-itobase5 <- function(n) {
-  c(floor(n / 5^4) %% 5, floor(n / 5^3) %% 5, floor(n / 5^2) %% 5, floor(n / 5^1) %% 5, floor(n / 5^0) %% 5)
-}
-
