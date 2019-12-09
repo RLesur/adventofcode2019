@@ -236,5 +236,10 @@ computer <- IntcodeComputer$new(program = program, NA_integer_)
 computer$execute_instruction()
 computer$run()
 
+# test 3
+program <- "1102,34915192,34915192,7,4,7,99,0"
+computer <- IntcodeComputer$new(program = program, 0L)
+computer$run()
+
 
 # TODO large numbers
