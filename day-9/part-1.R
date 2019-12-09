@@ -8,8 +8,8 @@ IntcodeComputer <- R6::R6Class(
     paused = FALSE,
     waiting_for_execution = TRUE,
     relative_base = 0L,
-    output = NULL, # an integer
-    .last_output = NULL # an integer
+    output = NULL, # a string (comma separated integers)
+    .last_output = NULL # a string (comma separated integers)
   ),
   public = list(
     initialize = function(program, input) {
@@ -32,8 +32,8 @@ IntcodeComputer <- R6::R6Class(
     get_instruction_pointer = function() {
       private$instruction_pointer
     },
-    get_opcode = function() { 
-      code <- private$memory[self$get_instruction_pointer() + 1]
+    get_opcode = function() {
+      code <- self$read_memory(self$get_instruction_pointer())
       as.integer(code %% 100)
     },
     get_instruction_length = function() {
@@ -53,6 +53,7 @@ IntcodeComputer <- R6::R6Class(
     get_instruction = function() {
       instruction_length <- self$get_instruction_length()
       instruction_pointer <- self$get_instruction_pointer()
+      self$check_memory_size(instruction_pointer + instruction_length)
       memory <- self$get_memory()
       memory[seq.int(instruction_pointer + 1, instruction_pointer + instruction_length)]
     },
@@ -75,7 +76,7 @@ IntcodeComputer <- R6::R6Class(
       }
     },
     get_parameters_mode = function() {
-      modes <- floor(private$memory[self$get_instruction_pointer() + 1] / 100)
+      modes <- floor(self$read_memory(self$get_instruction_pointer()) / 100)
       n_parameters <- self$get_instruction_length() - 1L
       if (n_parameters == 0) return(integer(0))
       vapply(
@@ -144,8 +145,7 @@ IntcodeComputer <- R6::R6Class(
     },
     write_output = function(value) {
       cat("output: ", value, "\n")
-      output_string <- paste0(c(private$output, value), collapse = "")
-      private$output <- as.integer(output_string)
+      private$output <- paste(c(private$output, value), collapse = ",")
     },
     get_output = function() {
       private$.last_output <- private$output
@@ -234,6 +234,7 @@ computer$execute_instruction()
 program <- "109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99"
 computer <- IntcodeComputer$new(program = program, NA_integer_)
 computer$execute_instruction()
+computer$run()
 
 
 # TODO large numbers
