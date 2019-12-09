@@ -1,7 +1,7 @@
 IntcodeComputer <- R6::R6Class(
   'IntcodeComputer', 
   private = list(
-    program = NULL,
+    memory = NULL,
     input = NULL, # a vector
     instruction_pointer = 0L,
     running = TRUE,
@@ -14,7 +14,7 @@ IntcodeComputer <- R6::R6Class(
     initialize = function(program, input) {
       program <- eval(parse(text = paste0("c(", program, ")")))
       private$input <- input
-      private$program <- as.integer(program)
+      private$memory <- as.integer(program)
     },
     is_running = function() {
       private$running
@@ -25,14 +25,14 @@ IntcodeComputer <- R6::R6Class(
     is_paused = function() {
       private$paused
     },
-    get_program = function() {
-      private$program
+    get_memory = function() {
+      private$memory
     },
     get_instruction_pointer = function() {
       private$instruction_pointer
     },
     get_opcode = function() { 
-      code <- private$program[self$get_instruction_pointer() + 1]
+      code <- private$memory[self$get_instruction_pointer() + 1]
       as.integer(code %% 100)
     },
     get_instruction_length = function() {
@@ -51,12 +51,12 @@ IntcodeComputer <- R6::R6Class(
     get_instruction = function() {
       instruction_length <- self$get_instruction_length()
       instruction_pointer <- self$get_instruction_pointer()
-      program <- self$get_program()
-      program[seq.int(instruction_pointer + 1, instruction_pointer + instruction_length)]
+      memory <- self$get_memory()
+      memory[seq.int(instruction_pointer + 1, instruction_pointer + instruction_length)]
     },
     move_pointer = function(address) {
-      if (!self$is_running()) stop("Program halted.")
-      if (self$is_paused()) stop("Program paused.")
+      if (!self$is_running()) stop("Computer halted.")
+      if (self$is_paused()) stop("Computer paused.")
       if (missing(address)) {
         instruction_length <- self$get_instruction_length()
         private$instruction_pointer <- private$instruction_pointer + instruction_length
@@ -73,7 +73,7 @@ IntcodeComputer <- R6::R6Class(
       }
     },
     get_parameters_mode = function() {
-      modes <- floor(private$program[self$get_instruction_pointer() + 1] / 100)
+      modes <- floor(private$memory[self$get_instruction_pointer() + 1] / 100)
       n_parameters <- self$get_instruction_length() - 1L
       if (n_parameters == 0) return(integer(0))
       vapply(
@@ -116,12 +116,12 @@ IntcodeComputer <- R6::R6Class(
       if (opcode == 8) return(function(x) x[1] == x[2])
     },
     read = function(address) {
-      private$program[address + 1]
+      private$memory[address + 1]
     },
     write = function(value, address) {
-      program <- private$program
-      program[address + 1] <- as.integer(value)
-      private$program <- program
+      memory <- private$memory
+      memory[address + 1] <- as.integer(value)
+      private$memory <- memory
     },
     write_output = function(value) {
       output_string <- paste0(c(private$output, value), collapse = "")
@@ -179,7 +179,7 @@ IntcodeComputer <- R6::R6Class(
       }
     },
     run = function() {
-      if (!self$is_running()) stop("Cannot run: program halted.")
+      if (!self$is_running()) stop("Cannot run: computer halted.")
       while (self$is_running() && !self$is_paused()) {
         self$execute_instruction()
       }
