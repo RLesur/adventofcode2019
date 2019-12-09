@@ -221,3 +221,5 @@ computer <- IntcodeComputer$new(program = program, 0)
 computer$.__enclos_env__$private$relative_base <- 2000
 computer$execute_instruction()
 computer$.__enclos_env__$private$relative_base
+
+# TODO large numbers
