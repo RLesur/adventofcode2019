@@ -119,12 +119,17 @@ IntcodeComputer <- R6::R6Class(
       if (opcode == 8) return(function(x) x[1] == x[2])
       if (opcode == 9) return(function(x) {x[1] + private$relative_base})
     },
+    check_memory_size = function(address) {
+      needed_size <- address + 1 - length(private$memory)
+      if (needed_size <= 0) return()
+      private$memory <- c(private$memory, rep.int(0L, times = needed_size))
+      NULL
+    },
     read_memory = function(address) {
-      if ((address + 1) > length(private$memory) || address < 0) {
-        stop("Wrong address memory: address ", address, 
-             " is outside current memory max address (", 
-             length(private$memory) - 1, ").")
+      if (address < 0) {
+        stop("Wrong address memory: negative address.")
       }
+      self$check_memory_size(address)
       value <- private$memory[address + 1]
       if (is.na(value)) {
         stop("Wrong address memory: NA value.")
@@ -132,10 +137,8 @@ IntcodeComputer <- R6::R6Class(
       value
     },
     write_memory = function(value, address) {
+      self$check_memory_size(address)
       memory <- private$memory
-      if ((address + 1) > length(memory)) {
-        memory <- c(memory, rep(NA_integer_, address + 1 - length(memory)))
-      }
       memory[address + 1] <- as.integer(value)
       private$memory <- memory
     },
