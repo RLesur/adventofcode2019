@@ -121,7 +121,9 @@ IntcodeComputer <- R6::R6Class(
     },
     read_memory = function(address) {
       if ((address + 1) > length(private$memory) || address < 0) {
-        stop("Wrong address memory: address is outside current memory.")
+        stop("Wrong address memory: address ", address, 
+             " is outside current memory max address (", 
+             length(private$memory) - 1, ").")
       }
       value <- private$memory[address + 1]
       if (is.na(value)) {
@@ -216,10 +218,11 @@ IntcodeComputer <- R6::R6Class(
 )
 
 # test
-program <- "109,19"
+program <- "109,19,204,-34"
 computer <- IntcodeComputer$new(program = program, 0)
 computer$.__enclos_env__$private$relative_base <- 2000
 computer$execute_instruction()
 computer$.__enclos_env__$private$relative_base
+computer$execute_instruction()
 
 # TODO large numbers
