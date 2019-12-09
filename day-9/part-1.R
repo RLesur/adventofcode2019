@@ -7,6 +7,7 @@ IntcodeComputer <- R6::R6Class(
     running = TRUE,
     paused = FALSE,
     waiting_for_execution = TRUE,
+    relative_base = 0L,
     output = NULL, # an integer
     .last_output = NULL # an integer
   ),
@@ -45,6 +46,7 @@ IntcodeComputer <- R6::R6Class(
       if (identical(opcode, 6L)) return(3L)
       if (identical(opcode, 7L)) return(4L)
       if (identical(opcode, 8L)) return(4L)
+      if (identical(opcode, 9L)) return(2L)
       if (identical(opcode, 99L)) return(1L)
       stop("Wrong Opcode")
     },
@@ -81,7 +83,7 @@ IntcodeComputer <- R6::R6Class(
         function(i) {
           modes <- floor(modes / 10^(i-1))
           res <- as.integer(modes %% 10)
-          if (res != 0 & res != 1) {
+          if (res != 0 & res != 1 & res != 2) {
             stop("Found value ", res)
           }
           res
@@ -101,19 +103,21 @@ IntcodeComputer <- R6::R6Class(
       get_value <- function(i) {
         if (parameters_mode[i] == 1) return(parameters[i]) 
         if (parameters_mode[i] == 0) return(self$read(parameters[i]))
+        if (parameters_mode[i] == 2) return(self$read(parameters[i] + private$relative_base))
         stop("got param mode ", parameters_mode[i])
       }
       vapply(seq.int(1, length(parameters)), get_value, FUN.VALUE = integer(1), USE.NAMES = FALSE)
     },
     get_operation = function() {
       opcode <- self$get_opcode()
-      if (!(opcode %in% c(1:2, 5:8))) stop("Opcode must be 1, 2, 5, 6, 7, 8")
+      if (!(opcode %in% c(1:2, 5:9))) stop("Opcode must be 1, 2, 5, 6, 7, 8, 9")
       if (opcode == 1) return(sum)
       if (opcode == 2) return(prod)
       if (opcode == 5) return(function(x) x[1] != 0)
       if (opcode == 6) return(function(x) x[1] == 0)
       if (opcode == 7) return(function(x) x[1] < x[2])
       if (opcode == 8) return(function(x) x[1] == x[2])
+      if (opcode == 9) return(function(x) {x[1] + private$relative_base})
     },
     read = function(address) {
       private$memory[address + 1]
@@ -177,6 +181,12 @@ IntcodeComputer <- R6::R6Class(
         else
           self$move_pointer()
       }
+      if (opcode == 9) {
+        operands <- self$get_operands()
+        operation <- self$get_operation()
+        private$relative_base <- operation(operands)
+        self$move_pointer()
+      }
     },
     run = function() {
       if (!self$is_running()) stop("Cannot run: computer halted.")
@@ -194,3 +204,10 @@ IntcodeComputer <- R6::R6Class(
     }
   )
 )
+
+# test
+program <- "109,19"
+computer <- IntcodeComputer$new(program = program, 0)
+computer$.__enclos_env__$private$relative_base <- 2000
+computer$execute_instruction()
+computer$.__enclos_env__$private$relative_base
