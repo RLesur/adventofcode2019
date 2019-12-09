@@ -143,7 +143,7 @@ IntcodeComputer <- R6::R6Class(
       private$memory <- memory
     },
     write_output = function(value) {
-      cat("output: ", output, "\n")
+      cat("output: ", value, "\n")
       output_string <- paste0(c(private$output, value), collapse = "")
       private$output <- as.integer(output_string)
     },
