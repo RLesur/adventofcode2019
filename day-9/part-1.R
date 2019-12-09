@@ -120,10 +120,20 @@ IntcodeComputer <- R6::R6Class(
       if (opcode == 9) return(function(x) {x[1] + private$relative_base})
     },
     read_memory = function(address) {
-      private$memory[address + 1]
+      if ((address + 1) > length(private$memory) || address < 0) {
+        stop("Wrong address memory: address is outside current memory.")
+      }
+      value <- private$memory[address + 1]
+      if (is.na(value)) {
+        stop("Wrong address memory: NA value.")
+      }
+      value
     },
     write_memory = function(value, address) {
       memory <- private$memory
+      if ((address + 1) > length(memory)) {
+        memory <- c(memory, rep(NA_integer_, address + 1 - length(memory)))
+      }
       memory[address + 1] <- as.integer(value)
       private$memory <- memory
     },
