@@ -259,3 +259,8 @@ program <- readLines("day-9/input.txt")
 computer <- IntcodeComputer$new(program = program)
 computer$run()
 computer$resume(1)
+
+# Part 2
+program <- readLines("day-9/input.txt")
+computer <- IntcodeComputer$new(program = program, input = 2)
+computer$run()
