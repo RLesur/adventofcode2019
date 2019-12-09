@@ -110,6 +110,13 @@ IntcodeComputer <- R6::R6Class(
       }
       do.call(c, lapply(seq.int(1, length(parameters)), get_value))
     },
+    get_write_address = function() {
+      parameter <- tail(self$get_parameters(), 1)
+      parameter_mode <- tail(self$get_parameters_mode(), 1)
+      if (parameter_mode == 1) stop("Write instruction cannot be in immediate mode.")
+      if (parameter_mode == 0) return(parameter)
+      if (parameter_mode == 2) return(parameter + private$relative_base)
+    },
     get_operation = function() {
       opcode <- self$get_opcode()
       if (!(opcode %in% c(1:2, 5:9))) stop("Opcode must be 1, 2, 5, 6, 7, 8, 9")
@@ -179,16 +186,14 @@ IntcodeComputer <- R6::R6Class(
       if (opcode == 3) {
         input <- self$read_input()
         if (self$is_paused()) return()
-        self$write_memory(input, self$get_parameters())
+        self$write_memory(input, self$get_write_address())
         self$move_pointer()
       }
       if (opcode %in% c(1:2, 7:8)) {
         operands <- self$get_operands()
         operation <- self$get_operation()
         output_value <- operation(operands)
-        parameters <- self$get_parameters()
-        output_address <- parameters[3]
-        self$write_memory(output_value, output_address)
+        self$write_memory(output_value, self$get_write_address())
         self$move_pointer()
       }
       if (opcode %in% 5:6) {
@@ -218,7 +223,7 @@ IntcodeComputer <- R6::R6Class(
     resume = function(input) {
       if (!self$is_running()) stop("Cannot resume: not running.")
       if (!self$is_paused()) stop("Cannot resume: not paused.")
-      private$input <- c(private$input, input)
+      private$input <- c(private$input, as.character(input))
       private$paused <- FALSE
       self$run()
     }
@@ -249,3 +254,8 @@ program <- "104,1125899906842624,99"
 computer <- IntcodeComputer$new(program = program)
 computer$run()
 
+# Game
+program <- readLines("day-9/input.txt")
+computer <- IntcodeComputer$new(program = program)
+computer$run()
+computer$resume(1)
