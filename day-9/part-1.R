@@ -1,9 +1,9 @@
 IntcodeComputer <- R6::R6Class(
   'IntcodeComputer', 
   private = list(
-    memory = NULL,
-    input = NULL, # a vector
-    instruction_pointer = 0L,
+    memory = character(0), # a named character vector (names: addresses, ints are stored as character)
+    input = c(), # a vector of integers stored as character
+    instruction_pointer = gmp::as.bigz(0L),
     running = TRUE,
     paused = FALSE,
     waiting_for_execution = TRUE,
@@ -13,9 +13,12 @@ IntcodeComputer <- R6::R6Class(
   ),
   public = list(
     initialize = function(program, input) {
-      program <- eval(parse(text = paste0("c(", program, ")")))
-      private$input <- input
-      private$memory <- as.integer(program)
+      if (!missing(input)) {
+        private$input <- as.character(input)
+      }
+      memory <- strsplit(program, ",")[[1]]
+      names(memory) <- seq.int(0, length(memory) - 1)
+      private$memory <- memory
     },
     is_running = function() {
       private$running
@@ -53,21 +56,19 @@ IntcodeComputer <- R6::R6Class(
     get_instruction = function() {
       instruction_length <- self$get_instruction_length()
       instruction_pointer <- self$get_instruction_pointer()
-      self$check_memory_size(instruction_pointer + instruction_length)
-      memory <- self$get_memory()
-      memory[seq.int(instruction_pointer + 1, instruction_pointer + instruction_length)]
+      self$read_block_memory(address = instruction_pointer, length = instruction_length)
     },
     move_pointer = function(address) {
       if (!self$is_running()) stop("Computer halted.")
       if (self$is_paused()) stop("Computer paused.")
       if (missing(address)) {
         instruction_length <- self$get_instruction_length()
-        private$instruction_pointer <- private$instruction_pointer + instruction_length
+        private$instruction_pointer <- gmp::as.bigz(private$instruction_pointer + instruction_length)
       } else {
-        private$instruction_pointer <- address
+        private$instruction_pointer <- gmp::as.bigz(address)
       }
       opcode <- self$get_opcode()
-      if (identical(opcode, 99L)) {
+      if (opcode == 99) {
         private$running <- FALSE
         private$waiting_for_execution <- FALSE
       } else {
@@ -76,7 +77,7 @@ IntcodeComputer <- R6::R6Class(
       }
     },
     get_parameters_mode = function() {
-      modes <- floor(self$read_memory(self$get_instruction_pointer()) / 100)
+      modes <- floor(as.integer(self$read_memory(self$get_instruction_pointer())) / 100)
       n_parameters <- self$get_instruction_length() - 1L
       if (n_parameters == 0) return(integer(0))
       vapply(
@@ -107,45 +108,48 @@ IntcodeComputer <- R6::R6Class(
         if (parameters_mode[i] == 2) return(self$read_memory(parameters[i] + private$relative_base))
         stop("got param mode ", parameters_mode[i])
       }
-      vapply(seq.int(1, length(parameters)), get_value, FUN.VALUE = integer(1), USE.NAMES = FALSE)
+      do.call(c, lapply(seq.int(1, length(parameters)), get_value))
     },
     get_operation = function() {
       opcode <- self$get_opcode()
       if (!(opcode %in% c(1:2, 5:9))) stop("Opcode must be 1, 2, 5, 6, 7, 8, 9")
-      if (opcode == 1) return(sum)
-      if (opcode == 2) return(prod)
+      if (opcode == 1) return(function(x) x[1] + x[2])
+      if (opcode == 2) return(function(x) x[1] * x[2])
       if (opcode == 5) return(function(x) x[1] != 0)
       if (opcode == 6) return(function(x) x[1] == 0)
-      if (opcode == 7) return(function(x) x[1] < x[2])
-      if (opcode == 8) return(function(x) x[1] == x[2])
-      if (opcode == 9) return(function(x) {x[1] + private$relative_base})
-    },
-    check_memory_size = function(address) {
-      needed_size <- address + 1 - length(private$memory)
-      if (needed_size <= 0) return()
-      private$memory <- c(private$memory, rep.int(0L, times = needed_size))
-      NULL
+      if (opcode == 7) return(function(x) as.integer(x[1] < x[2]))
+      if (opcode == 8) return(function(x) as.integer(x[1] == x[2]))
+      if (opcode == 9) return(function(x) x[1] + private$relative_base)
     },
     read_memory = function(address) {
+      if (length(address) > 1) {
+        stop("Method read_memory cannot read a block, use read_block_memory instead.")
+      }
+      address <- gmp::as.bigz(address)
       if (address < 0) {
         stop("Wrong address memory: negative address.")
       }
-      self$check_memory_size(address)
-      value <- private$memory[address + 1]
+      address <- as.character(address)
+      value <- gmp::as.bigz(private$memory[address])
       if (is.na(value)) {
-        stop("Wrong address memory: NA value.")
+        value <- gmp::as.bigz(0L)
       }
       value
     },
+    read_block_memory = function(address, length) {
+      address <- gmp::as.bigz(address)
+      addresses <- address + seq.int(0, length.out = as.integer(length))
+      read <- self$read_memory
+      do.call(c, lapply(addresses, read))
+    },
     write_memory = function(value, address) {
-      self$check_memory_size(address)
       memory <- private$memory
-      memory[address + 1] <- as.integer(value)
+      memory[as.character(address)] <- as.character(value)
       private$memory <- memory
     },
     write_output = function(value) {
-      cat("output: ", value, "\n")
-      private$output <- paste(c(private$output, value), collapse = ",")
+      cat("output: ", as.character(value), "\n")
+      private$output <- paste(c(private$output, as.character(value)), collapse = ",")
     },
     get_output = function() {
       private$.last_output <- private$output
@@ -162,7 +166,7 @@ IntcodeComputer <- R6::R6Class(
         return()
       }
       private$input <- tail(input, -1)
-      as.integer(input[1])
+      gmp::as.bigz(input[1])
     },
     execute_instruction = function() {
       stopifnot(private$waiting_for_execution)
@@ -232,14 +236,16 @@ computer$execute_instruction()
 
 # test 2
 program <- "109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99"
-computer <- IntcodeComputer$new(program = program, NA_integer_)
-computer$execute_instruction()
+computer <- IntcodeComputer$new(program = program)
 computer$run()
 
 # test 3
 program <- "1102,34915192,34915192,7,4,7,99,0"
-computer <- IntcodeComputer$new(program = program, 0L)
+computer <- IntcodeComputer$new(program = program)
 computer$run()
 
+# test 4
+program <- "104,1125899906842624,99"
+computer <- IntcodeComputer$new(program = program)
+computer$run()
 
-# TODO large numbers
