@@ -1,5 +1,5 @@
-Amplifier <- R6::R6Class(
-  'Amplifier', 
+IntcodeComputer <- R6::R6Class(
+  'IntcodeComputer', 
   private = list(
     program = NULL,
     input = NULL, # a vector
