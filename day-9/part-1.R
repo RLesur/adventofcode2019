@@ -102,8 +102,8 @@ IntcodeComputer <- R6::R6Class(
       }
       get_value <- function(i) {
         if (parameters_mode[i] == 1) return(parameters[i]) 
-        if (parameters_mode[i] == 0) return(self$read(parameters[i]))
-        if (parameters_mode[i] == 2) return(self$read(parameters[i] + private$relative_base))
+        if (parameters_mode[i] == 0) return(self$read_memory(parameters[i]))
+        if (parameters_mode[i] == 2) return(self$read_memory(parameters[i] + private$relative_base))
         stop("got param mode ", parameters_mode[i])
       }
       vapply(seq.int(1, length(parameters)), get_value, FUN.VALUE = integer(1), USE.NAMES = FALSE)
@@ -119,10 +119,10 @@ IntcodeComputer <- R6::R6Class(
       if (opcode == 8) return(function(x) x[1] == x[2])
       if (opcode == 9) return(function(x) {x[1] + private$relative_base})
     },
-    read = function(address) {
+    read_memory = function(address) {
       private$memory[address + 1]
     },
-    write = function(value, address) {
+    write_memory = function(value, address) {
       memory <- private$memory
       memory[address + 1] <- as.integer(value)
       private$memory <- memory
@@ -159,7 +159,7 @@ IntcodeComputer <- R6::R6Class(
       if (opcode == 3) {
         input <- self$read_input()
         if (self$is_paused()) return()
-        self$write(input, self$get_parameters())
+        self$write_memory(input, self$get_parameters())
         self$move_pointer()
       }
       if (opcode %in% c(1:2, 7:8)) {
@@ -168,7 +168,7 @@ IntcodeComputer <- R6::R6Class(
         output_value <- operation(operands)
         parameters <- self$get_parameters()
         output_address <- parameters[3]
-        self$write(output_value, output_address)
+        self$write_memory(output_value, output_address)
         self$move_pointer()
       }
       if (opcode %in% 5:6) {
