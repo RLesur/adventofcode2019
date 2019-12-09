@@ -140,6 +140,7 @@ IntcodeComputer <- R6::R6Class(
       private$memory <- memory
     },
     write_output = function(value) {
+      cat("output: ", output, "\n")
       output_string <- paste0(c(private$output, value), collapse = "")
       private$output <- as.integer(output_string)
     },
@@ -217,12 +218,19 @@ IntcodeComputer <- R6::R6Class(
   )
 )
 
-# test
+# tests
+# test 1
 program <- "109,19,204,-34"
 computer <- IntcodeComputer$new(program = program, 0)
 computer$.__enclos_env__$private$relative_base <- 2000
 computer$execute_instruction()
 computer$.__enclos_env__$private$relative_base
 computer$execute_instruction()
+
+# test 2
+program <- "109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99"
+computer <- IntcodeComputer$new(program = program, NA_integer_)
+computer$execute_instruction()
+
 
 # TODO large numbers
