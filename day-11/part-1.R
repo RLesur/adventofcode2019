@@ -336,7 +336,8 @@ Robot <- R6::R6Class(
         )
       }))
       ggplot(white_panels, aes(x, y, fill= fill)) + 
-        geom_tile()
+        geom_tile() +
+        theme_void()
     },
     run = function() {
       while (self$is_running()) {
