@@ -2,12 +2,14 @@ Moon <- R6::R6Class(
   "Moon",
   private = list(
     pos = c(),
-    val = c(x = 0, y = 0, z = 0)
+    vel = c(x = 0, y = 0, z = 0)
   ),
   public = list(
     initialize = function(x, y ,z) {
       private$pos <- c(x = x, y = y, z = 0)
-    },
+    }
+  ),
+  active = list(
     potential_energy = function() {
       sum(abs(private$pos))
     },
@@ -15,7 +17,7 @@ Moon <- R6::R6Class(
       sum(abs(private$vel))
     },
     total_energy = function() {
-      self$potential_energy() + self$kinetic_energy()
+      self$potential_energy + self$kinetic_energy
     }
   )
 )
