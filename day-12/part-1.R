@@ -6,7 +6,7 @@ Moon <- R6::R6Class(
   ),
   public = list(
     initialize = function(x, y ,z) {
-      private$pos <- c(x = x, y = y, z = 0)
+      private$pos <- c(x = x, y = y, z = z)
     }
   ),
   active = list(
